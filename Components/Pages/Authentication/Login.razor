@@ -1,0 +1,91 @@
+@page "/login"
+@using BlazorCascadingAuth.Data
+@using BlazorCascadingAuth.Models
+@using BlazorCascadingAuth.Models.ViewModels
+@using System.Security.Claims
+@using BlazorCascadingAuth.Services
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication.Cookies
+@using Microsoft.AspNetCore.Identity
+@inject AppDbContext appDbContext
+@inject NavigationManager navigationManager
+
+<h1>Login:</h1>
+
+@* The <EditForm> component is specifically designed for forms that interact with data models. It's part of Blazor's forms and validation system.
+The Model parameter of <EditForm> specifies the data model that the form fields are bound to. *@
+
+@* The <Form> component is more generic and doesn't require a data model. It's suitable for basic forms without complex data binding or validation requirements. *@
+<EditForm Model="@Model" OnValidSubmit="Authenticate" FormName="LoginForm">
+    <div>
+        <label>Enter Username:</label>
+        <InputText @bind-Value="Model.UserName"/>
+    </div>
+    <div>
+    <label>Enter Password:</label>
+        <InputText @bind-Value="Model.Password" type="password"/>
+    </div>
+    <div>
+        <span>@errorMessage</span>
+    </div>
+    <div>
+        <button type="submit">Login</button>
+    </div>
+</EditForm>
+
+
+@code {
+    // The [CascadingParameter] attribute in Blazor is used to pass a parameter value from a parent component to its child components in the component tree
+    // It's a way to share data or objects down the component hierarchy without the need for explicit parameter passing.
+    [CascadingParameter]
+    public HttpContext? HttpContext{ get; set; }
+    // HttpContext represents the context of an HTTP request being processed by the server.
+    // It contains information such as the request and response objects, session state, user identity, and other request-specific details.
+    // By making HttpContext a cascading parameter, you can access the HTTP context within any child component without passing it explicitly through component parameters. 
+    // Yes, typically, the HttpContext object in ASP.NET Core includes user claims when the user is authenticated. 
+
+    [SupplyParameterFromForm]
+    public LoginViewModel Model { get; set; } = new();
+
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync() {
+        appDbContext.Database.EnsureCreated();
+    }
+
+    private async Task Authenticate(){
+        var userAccount = appDbContext.Users.FirstOrDefault(x => x.Username == Model.UserName);
+        if(userAccount is null) {
+            errorMessage = "Invalid Username.";
+            return;
+        }
+
+        var passwordHasher = new PasswordHasherService();
+        var verificationResult = passwordHasher.VerifyHashedPassword(userAccount, userAccount.Password!, Model.Password!);
+        
+        if (verificationResult == PasswordVerificationResult.Failed) {
+            errorMessage = "Invalid Password.";
+            return;
+        }
+
+        var claims = new List<Claim>{
+            new Claim(ClaimTypes.Name, Model.UserName!), 
+            new Claim(ClaimTypes.Role, userAccount.Role!),
+            new Claim(ClaimTypes.NameIdentifier, userAccount.Id.ToString()) 
+        };
+        // Claims represent pieces of information about the user, such as their name, email, roles, or any other custom data associated with their identity.
+        
+        var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+        // ClaimsIdentity object, which represents the identity of the user. 
+        // CookieAuthenticationDefaults.AuthenticationScheme: This parameter specifies the authentication scheme used to authenticate the user. 
+        // By creating a ClaimsIdentity object with these claims and specifying the authentication scheme, you're essentially establishing the identity of the user within the authentication system of your ASP.NET Core application.
+        var principal = new ClaimsPrincipal(identity);
+        // ClaimsPrincipal object, which represents the user's security context.
+        // This ClaimsPrincipal represents the user's security context, including their identity and associated claims.
+        await HttpContext!.SignInAsync(principal);
+        //  Signs in the user with the principal by creating an authentication cookie containing the user's identity information. 
+        // After calling HttpContext.SignInAsync(), the user is considered authenticated, and subsequent requests from the client will include the authentication cookie containing the user's identity. 
+        navigationManager.NavigateTo("/");
+    }
+
+}

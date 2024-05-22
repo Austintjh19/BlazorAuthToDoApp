@@ -1,0 +1,182 @@
+﻿@page "/"
+@using BlazorCascadingAuth.Data
+@using BlazorCascadingAuth.Models
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@rendermode InteractiveServer
+@inject IJSRuntime js
+@inject AppDbContext appDbContext
+
+<PageTitle>Home</PageTitle>
+
+<AuthorizeView>
+
+    <NotAuthorized>
+        <h1>Welcome to ToDoApp:</h1>
+        <p>For Existing users: </p>
+        <a href="/login">Login Here.</a>
+        <p>For New users: </p>
+        <a href="/sign-up">Sign Up Here</a>
+    </NotAuthorized>
+
+    <Authorized>
+        <section id="Home">
+
+            <div class="home-content">
+
+            <div class="header">
+            <h1>Add a Task - @currentUser!.Username:</h1>
+            <hr>
+            </div>
+
+            <div class="add-task-form-container">
+                <form id="AddTaskForm" @onsubmit="AddTask">
+                    <div class="form-entries-container">
+                        <label for="taskName">Task Name:</label>
+                        <input id="taskName" name="taskName" type="text" @bind="newTaskName" />
+                    </div>
+                    <div class="form-entries-container">
+                        <label for="deadline">Deadline:</label>
+                        <input id="deadline" name="deadline" type="date" @bind="newDeadline" />
+                    </div>
+                    <div class="add-btn-container">
+                        <button class="btn" id="AddButton" type="submit">Add</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="header">
+            <h1>Your Tasks - @currentUser.Username:</h1>
+            <hr>
+            </div>
+
+            <div class="tasks-container">
+                @foreach (var task in todoTasks) {
+                    <div class="task-details">
+                        @if (task.Id != editTaskId) {
+                            <div class="task-details-container">
+                                <div class="form-entries-container">
+                                    <label for="TaskName">Task Name:</label>
+                                    <p>@task.TaskName</p>
+                                </div>
+                                <div class="form-entries-container">
+                                    <label for="Deadline">Deadline:</label>
+                                    <p>@task.Deadline.ToString("dd-MM-yyyy")</p>
+                                </div>
+                            </div>
+                            <div class="btns-container">
+                                <button class="btn" id="EditButton" @onclick="() => BeginEdit(task.Id)">Edit</button>
+                                <button class="btn" id="DeleteButton" @onclick="() => DeleteTask(task)">Delete</button>
+                            </div>
+                        } else {
+                            <form @onsubmit="() => UpdateTask(task)">
+                                <div class="task-details-container">
+                                    <div class="form-entries-container">
+                                        <label for="editTaskName">Task Name:</label>
+                                        <input id="editTaskName" name="editTaskName" type="text" @bind="editTaskName" />
+                                    </div>
+                                    <div class="form-entries-container">
+                                        <label for="editDeadline">Deadline:</label>
+                                        <input id="editDeadline" name="editDeadline" type="date" @bind="editDeadline" />
+                                    </div>
+                                </div>
+                                <div class="btns-container">
+                                    <button class="btn" id="UpdateButton" type="submit">Update</button>
+                                    <button class="btn" id="CancelButton" @onclick="CancelEdit">Cancel</button>
+                                </div>
+                            </form>
+                        }
+                    </div>
+                }
+            </div>
+
+            
+        </div>
+
+        </section>
+
+    </Authorized>
+</AuthorizeView>
+
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? authenticationStateTask {get; set;}
+    // The AuthenticationState type typically represents the authentication state of the user within a Blazor application.
+    //  It contains information such as whether the user is authenticated and their associated claims.
+    // The fact that authenticationStateTask is of type Task<AuthenticationState> suggests that it represents an asynchronous operation that retrieves the authentication state.
+    // Task<>: The Task<> type in C# represents an asynchronous operation that may produce a result of type T. In this case, the T is AuthenticationState.
+        
+    private List<ToDo> todoTasks = new List<ToDo>();
+
+    private string newTaskName = string.Empty;
+    private DateTime newDeadline = DateTime.Today;
+
+    private int editTaskId = -1;
+    private string editTaskName = string.Empty;
+    private DateTime editDeadline = DateTime.Today;
+
+    private User? currentUser;
+
+    protected override async Task OnInitializedAsync() {
+        await base.OnInitializedAsync();
+        // OnInitializedAsync method ensures that the base class's implementation of the OnInitializedAsync method is executed before proceeding with the custom logic in the derived class.
+        
+        var authenticationState = await authenticationStateTask!;
+        var userIdClaim = authenticationState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value; 
+        // The FindFirst method is used to find the first claim in the ClaimsPrincipal object that matches the specified claim type. In this case, ClaimTypes.NameIdentifier is the claim type representing the user's unique identifier.
+        if (!string.IsNullOrEmpty(userIdClaim)) {
+            var userId = int.Parse(userIdClaim);
+            currentUser = await appDbContext.Users.Include(u => u.ToDos).FirstOrDefaultAsync(u => u.Id == userId)!;
+            // .Include(u => u.ToDos): This is an eager loading operation using the Include method. It specifies that when the user entity is retrieved, its related ToDos navigation property should also be loaded. This helps avoid lazy loading and ensures that the related to-dos are loaded along with the user entity in a single database query.
+            if (currentUser != null) {
+                todoTasks = currentUser.ToDos!.ToList();
+            }
+        }
+    }
+
+    private async void AddTask() {
+        if (!string.IsNullOrWhiteSpace(newTaskName)) {
+            var newTask = new ToDo { TaskName = newTaskName, Deadline = newDeadline };
+            currentUser!.ToDos!.Add(newTask);
+            await appDbContext.SaveChangesAsync();
+            todoTasks = currentUser.ToDos.ToList();
+            newTaskName = string.Empty;
+            newDeadline = DateTime.Today;
+        }
+    }
+
+   
+    private async void DeleteTask(ToDo task) {
+        currentUser!.ToDos!.Remove(task);
+        await appDbContext.SaveChangesAsync();
+        todoTasks = currentUser.ToDos.ToList();
+    }
+
+    private void BeginEdit(int taskId) {
+        var taskToEdit = todoTasks.FirstOrDefault(t => t.Id == taskId);
+        if (taskToEdit != null) {
+            editTaskId = taskId;
+            editTaskName = taskToEdit.TaskName!;
+            editDeadline = taskToEdit.Deadline;
+        }
+    }
+
+    private async void UpdateTask(ToDo task) {
+        if (!string.IsNullOrWhiteSpace(editTaskName)) {
+            task.TaskName = editTaskName;
+            task.Deadline = editDeadline;
+            await appDbContext.SaveChangesAsync();
+            todoTasks = currentUser!.ToDos!.ToList();
+            CancelEdit();
+        }
+    }
+
+    private void CancelEdit() {
+        editTaskId = -1;
+        editTaskName = string.Empty;
+        editDeadline = DateTime.Today;
+    }
+
+}

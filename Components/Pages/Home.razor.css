@@ -1,0 +1,117 @@
+#Home {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.home-content {
+    width: 1200px;
+}
+
+.header {
+    margin-top: 40px;
+    margin-bottom: 25px;
+    width: 100%;
+}
+
+.header h1 {
+    font-weight: bold;
+    font-size: 20px;
+}
+
+.header hr {
+    margin: 5px 0px 0px 0px;
+    padding: 0px;
+}
+
+.add-task-form-container {
+    width: 100%;
+    padding: 20px 30px 20px 30px;
+    align-items: center;
+    background-color: #FFFFFF;
+    border-radius: 20px;
+    box-shadow: 0 8px 24px hsla(0, 0%, 0%, .15);
+}
+
+
+.form-entries-container {
+    display: flex;
+    flex-direction: row;
+    margin: 20px 0px 20px 0px;
+    display: flex;
+    align-items: center;
+}
+
+.form-entries-container label {
+    font-size: 16px;
+    width: 150px;
+}
+
+.form-entries-container p{
+    font-size: 16px;
+    padding: 5px;
+    margin: 0;
+}
+
+#taskName, #deadline, #editTaskName, #editDeadline {
+    font-size: 16px;
+    width: 100%;
+    padding: 5px;
+    outline: none;
+    border: none;
+    border-bottom: 1px solid #000000;
+}
+
+#taskName:focus, #deadline:focus, #editTaskName:focus, #editDeadline:focus {
+    border-bottom: 1px solid #1584f4; 
+    color: #1584f4;    
+}
+
+.add-btn-container {
+    display: flex;
+    justify-content: right;
+}
+
+.btns-container {
+    display: flex;
+    justify-content: right;
+}
+
+.btn {
+    background-color: #000000;
+    color: #ffffff;
+    border: none;
+    border-radius: 10px;
+    padding: 5px 25px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.btn:hover {
+    background-color: #403f3f;
+}
+
+.tasks-container {
+    display: flex;
+    flex-wrap: wrap;
+}
+
+.task-details {
+    min-width: 350px;
+    height: 225px;
+    background-color: #FFFFFF;
+    border-radius: 20px;
+    box-shadow: 0 8px 24px hsla(0, 0%, 0%, .15);
+    padding: 20px;
+    margin: 20px 20px;
+}
+
+.task-details-container {
+    height: 125px;
+}
+
+#CancelButton, #DeleteButton {
+    margin-left: 20px;
+}

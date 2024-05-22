@@ -1,0 +1,93 @@
+@page "/sign-up"
+@using BlazorCascadingAuth.Data
+@using BlazorCascadingAuth.Models
+@using BlazorCascadingAuth.Models.ViewModels
+@using System.Security.Claims
+@using BlazorCascadingAuth.Services
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication.Cookies
+@inject AppDbContext appDbContext
+@inject NavigationManager navigationManager
+
+<h1>Sign Up:</h1>
+
+<EditForm Model="@signUpModel" OnValidSubmit="Register" FormName="SignUpForm">
+    <div>
+        <label>Enter New Username:</label>
+        <InputText @bind-Value="signUpModel.UserName"/>
+        <ValidationMessage For="@(() => signUpModel.UserName)" />
+    </div>
+    <div>
+        <label>Enter New Password:</label>
+        <InputText @bind-Value="signUpModel.Password" type="password" />
+        <ValidationMessage For="@(() => signUpModel.Password)" />
+    </div>
+    <div>
+        <label>Re-enter New Password:</label>
+        <InputText @bind-Value="signUpModel.ConfirmPassword" type="password" />
+        <ValidationMessage For="@(() => signUpModel.ConfirmPassword)" />
+    </div>
+    <div>
+        <span>@signUpErrorMessage</span>
+    </div>
+    <div>
+        <button type="submit">Sign Up</button>
+    </div>
+</EditForm>
+
+
+@code {
+    [CascadingParameter]
+    public HttpContext? HttpContext{ get; set; }
+
+    [SupplyParameterFromForm]
+    public SignUpViewModel signUpModel { get; set; } = new();
+
+    private string? signUpErrorMessage;
+
+    protected override void OnInitialized() {
+        appDbContext.Database.EnsureCreated();
+    }
+
+    private async Task Register(){
+        if (appDbContext.Users.Any(u => u.Username == signUpModel.UserName))
+        {
+            signUpErrorMessage = "Username already exists.";
+            return;
+        }
+
+        if (string.IsNullOrEmpty(signUpModel.UserName) || string.IsNullOrEmpty(signUpModel.Password) || string.IsNullOrEmpty(signUpModel.ConfirmPassword)) {
+             signUpErrorMessage = "Username/ Password empty.";
+            return;
+        }
+
+        if (signUpModel.Password != signUpModel.ConfirmPassword) {
+            signUpErrorMessage = "Passwords do not match.";
+            return;
+        }
+
+        var passwordHasher = new PasswordHasherService();
+        var hashedPassword = passwordHasher.HashPassword(new User(), signUpModel.Password);
+
+        var newUser = new User
+        {
+            Username = signUpModel.UserName,
+            Password = hashedPassword, 
+            Role = "User"
+        };
+
+        appDbContext.Users.Add(newUser);
+        await appDbContext.SaveChangesAsync();
+
+        var claims = new List<Claim>{
+            new Claim(ClaimTypes.Name, signUpModel.UserName), 
+            new Claim(ClaimTypes.Role, newUser.Role),
+            new Claim(ClaimTypes.NameIdentifier, newUser.Id.ToString()) 
+        };
+        
+        var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+        var principal = new ClaimsPrincipal(identity);
+        await HttpContext!.SignInAsync(principal);
+        navigationManager.NavigateTo("/");
+    }
+}

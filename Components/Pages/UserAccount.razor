@@ -1,0 +1,207 @@
+@page "/user-account"
+@using System.Security.Claims
+@using BlazorCascadingAuth.Data
+@using BlazorCascadingAuth.Models
+@using BlazorCascadingAuth.Models.ViewModels
+@using BlazorCascadingAuth.Services
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@rendermode InteractiveServer
+@inject AppDbContext appDbContext
+@attribute [StreamRendering]
+@attribute [Authorize(Roles = "Admin, User")]
+@inject IJSRuntime js
+
+<h1>Hi, @currentUser!.Username:</h1>
+
+<h2>Change Username:</h2>
+<hr>
+<form @onsubmit="UpdateUsername">
+    <div>
+        <label for="username">Update Username: </label>
+        <input id="username" type="text" placeholder="@currentUser.Username" @bind="newUsername" />
+    </div>
+    <div>
+         @if (!string.IsNullOrEmpty(usernameErrorMessage))
+        {
+            <div class="text-danger">@usernameErrorMessage</div>
+        }
+    </div>
+    <div>
+        <button type="submit">Update Username</button>
+    </div>
+</form>
+
+<h2>Change Password:</h2>
+<hr>
+
+<form @onsubmit="UpdatePassword">
+    <div>
+        <label for="oldPassword">Enter Old Password:</label>
+        <input id="oldPassword" type="password" @bind="oldPassword" />
+    
+    </div>
+    <div>
+        <label for="newPassword">Enter New Password:</label>
+        <input id="newPassword" type="password" @bind="newPassword" />
+    </div>
+    <div>
+        <label for="confirmNewPassword">Confirm New Password:</label>
+        <input id="confirmNewPassword" type="password" @bind="confirmNewPassword" />
+    </div>
+    <div>
+        @if (!string.IsNullOrEmpty(passwordErrorMessage))
+        {
+            <div class="text-danger">@passwordErrorMessage</div>
+        }
+    </div>
+    <div>
+        <button type="submit">Update Password</button>
+    </div>
+</form>
+
+<h2>Select Nationality:</h2>
+<hr>
+
+<form @onsubmit="UpdateNationality">
+    <div>
+        <label>Select Nationality: </label>
+        <div class="dropdown">
+            <button class="btn dropdown-toggle btn-outline-secondary" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                @{
+                    var selectedNationality = Nationalities.FirstOrDefault(n => n.NationalityId == selectedNationalityId);
+                    if (selectedNationality != null)
+                    {
+                        <img src="@selectedNationality.Icon" alt="@selectedNationality.Country" width="20" height="15" class="mr-2" /> @($"{selectedNationality.CountryCode} - {selectedNationality.Country}")
+                    }
+                    else
+                    {
+                        @("Select Nationality")
+                    }
+                }
+            </button>
+            <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+                @foreach (var nationality in Nationalities)
+                {
+                    <button type="button" class="dropdown-item" @onclick="() => SelectNationality(nationality)">
+                        <img src="@nationality.Icon" alt="@nationality.Country" width="20" height="15" class="mr-2" /> @nationality.CountryCode - @nationality.Country
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+    <div>
+        <button type="submit">Update Nationality</button>
+    </div>
+</form>
+
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? authenticationStateTask {get; set;}
+
+    private User? currentUser;
+
+    private string? usernameErrorMessage;
+
+    private string? passwordErrorMessage;
+
+
+    private string? newUsername;
+
+    private string? oldPassword;
+
+    private string? newPassword;
+
+    private string? confirmNewPassword;
+
+    private List<Nationality> Nationalities = new List<Nationality>(); 
+        
+    private int selectedNationalityId;
+    protected override async Task OnInitializedAsync() {
+        await base.OnInitializedAsync();
+        
+        var authenticationState = await authenticationStateTask!;
+        var userIdClaim = authenticationState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value; 
+        if (!string.IsNullOrEmpty(userIdClaim)) {
+            var userId = int.Parse(userIdClaim);
+            currentUser = await appDbContext.Users.FirstOrDefaultAsync(u => u.Id == userId);
+        }
+
+        Nationalities = appDbContext.Nationalities.ToList();
+        if (currentUser!.Nationality != null){
+            selectedNationalityId = currentUser.Nationality.NationalityId;
+        }
+    }
+
+    private async Task UpdateUsername(){
+        if (string.IsNullOrEmpty(newUsername)) {
+            usernameErrorMessage = "Username cannot be empty.";
+            return;
+        }
+
+        if (appDbContext.Users.Any(u => u.Username == newUsername))
+        {
+            usernameErrorMessage = "Username already exists.";
+            return;
+        }
+
+        currentUser!.Username = newUsername;
+        appDbContext.Entry(currentUser).State = EntityState.Modified;
+        // When you modify the properties of an entity object that is being tracked by EF Core, it automatically detects the changes and marks the entity state as Modified. 
+        //  However, if currentUser is not being tracked by EF Core or if it's detached from the context, EF Core won't automatically detect the changes, and you need to explicitly set the entity state to Modified
+        await appDbContext.SaveChangesAsync();
+        usernameErrorMessage = null;
+    }
+
+    private async Task UpdatePassword() {
+        
+        var passwordHasher = new PasswordHasherService();
+        if (!passwordHasher.VerifyHashedPassword(currentUser!, currentUser!.Password!, oldPassword!).Equals(PasswordVerificationResult.Success)) {
+            passwordErrorMessage = "Old password is incorrect.";
+            return;
+        }
+
+        if (string.IsNullOrEmpty(newPassword) || string.IsNullOrEmpty(confirmNewPassword)) {
+            passwordErrorMessage = "New password fields cannot be empty.";
+            return;
+        }
+
+        if (newPassword != confirmNewPassword) {
+            passwordErrorMessage = "New passwords do not match.";
+            return;
+        }
+
+        currentUser.Password = passwordHasher.HashPassword(currentUser, newPassword);
+        appDbContext.Entry(currentUser).State = EntityState.Modified;
+        await appDbContext.SaveChangesAsync();
+
+        oldPassword = null;
+        newPassword = null;
+        confirmNewPassword = null;
+        passwordErrorMessage = null;
+        await PasswordUpdatedAlert();
+    }
+
+    private async Task PasswordUpdatedAlert() { 
+        var authenticaionState = await authenticationStateTask!;
+        var message = $"Password has been succesfully updated.";
+        await js.InvokeVoidAsync("alert", message);
+    }
+
+    private async Task UpdateNationality() {
+        currentUser!.Nationality = Nationalities.FirstOrDefault(n => n.NationalityId == selectedNationalityId);
+        appDbContext.Entry(currentUser).State = EntityState.Modified;
+        await appDbContext.SaveChangesAsync();
+        var authenticaionState = await authenticationStateTask!;
+        var message = $"Nationality has been succesfully updated. It is now " + currentUser.Nationality!.Country;
+        await js.InvokeVoidAsync("alert", message);
+    }
+
+    private void SelectNationality(Nationality nationality)
+    {
+        selectedNationalityId = nationality.NationalityId;
+    }
+
+}
